@@ -3,6 +3,7 @@
  *  Fixer Agent
  *  ─ Uses LLM (Google Gemini via LangChain) to classify bugs from error
  *    logs, generate targeted code fixes, and apply them to the local repo.
+ *  ─ Supports model fallback chain + retry with backoff on rate limits.
  * ═══════════════════════════════════════════════════════════════════════
  */
 
@@ -37,16 +38,60 @@ Response format (JSON array):
   }
 ]`;
 
+/**
+ * Fallback model chain — ordered by free-tier quota (highest first):
+ *   gemini-2.5-flash-lite : 1,000 RPD, 15 RPM  (best free quota)
+ *   gemini-2.5-flash      :   250 RPD, 10 RPM
+ *   gemini-2.0-flash-lite :   fallback
+ */
+const FALLBACK_MODELS = [
+  process.env.GEMINI_MODEL || "gemini-2.5-flash-lite",
+  "gemini-2.5-flash",
+  "gemini-2.0-flash-lite",
+];
+
 export class FixerAgent {
   constructor(runId) {
     this.runId = runId;
     this.log = createRunLogger(runId, "Fixer");
-    this.llm = new ChatGoogleGenerativeAI({
-      model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
+  }
+
+  /** Create a fresh LLM instance for a given model name */
+  _createLLM(modelName) {
+    return new ChatGoogleGenerativeAI({
+      model: modelName,
       apiKey: process.env.GOOGLE_API_KEY,
       temperature: 0.1,
       maxOutputTokens: 8192,
     });
+  }
+
+  /** Invoke LLM with retry + model fallback */
+  async _invokeWithFallback(messages) {
+    for (const model of FALLBACK_MODELS) {
+      const llm = this._createLLM(model);
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          this.log.info(`Trying model ${model} (attempt ${attempt}/3)...`);
+          const response = await llm.invoke(messages);
+          this.log.info(`✓ Model ${model} responded successfully`);
+          return response;
+        } catch (err) {
+          const is429 = err.message?.includes("429") || err.message?.includes("quota") || err.message?.includes("Too Many Requests");
+          if (is429 && attempt < 3) {
+            const delay = attempt * 15_000; // 15s, 30s
+            this.log.warn(`Rate limited on ${model}, retrying in ${delay / 1000}s...`);
+            await new Promise((r) => setTimeout(r, delay));
+          } else if (is429) {
+            this.log.warn(`${model} quota exhausted, trying next model...`);
+            break; // try next model
+          } else {
+            throw err; // non-rate-limit error, bubble up
+          }
+        }
+      }
+    }
+    throw new Error("All Gemini models exhausted — rate limited on every fallback");
   }
 
   /**
@@ -84,7 +129,7 @@ export class FixerAgent {
 
     let fixes = [];
     try {
-      const response = await this.llm.invoke([
+      const response = await this._invokeWithFallback([
         new SystemMessage(SYSTEM_PROMPT),
         new HumanMessage(userPrompt),
       ]);

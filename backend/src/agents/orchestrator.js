@@ -47,6 +47,9 @@ export class Orchestrator {
     this.allFixes = [];
     this.totalCommits = 0;
     this.totalFailures = 0;
+    this.errorLogs = [];           // raw error output per iteration
+    this.repoStats = {};           // language, files, test files, etc.
+    this.iterationDetails = [];    // detailed info per iteration
   }
 
   /**
@@ -76,6 +79,15 @@ export class Orchestrator {
       const analysisResult = await this.analyzer.analyze(this.repoUrl);
       repoDir = analysisResult.repoDir;
 
+      // Store repo stats
+      this.repoStats = {
+        language: analysisResult.language,
+        runtime: analysisResult.runtime?.image || "native",
+        testCommand: analysisResult.runtime?.testCmd || "unknown",
+        testFilesFound: analysisResult.testFiles?.length || 0,
+        testFiles: analysisResult.testFiles || [],
+      };
+
       this.addTimeline(0, analysisResult.passed ? "PASSED" : "FAILED");
 
       if (analysisResult.passed) {
@@ -85,6 +97,7 @@ export class Orchestrator {
         // ─── Fix Loop ──────────────────────────────────────────────
         let currentOutput = analysisResult.output;
         this.totalFailures++;
+        this.errorLogs.push({ iteration: 0, output: currentOutput?.slice(-5000) || "" });
 
         for (iteration = 1; iteration <= RETRY_LIMIT; iteration++) {
           this.log.info(`═══ Iteration ${iteration}/${RETRY_LIMIT} ═══`);
@@ -96,12 +109,18 @@ export class Orchestrator {
             progress: Math.round((iteration / RETRY_LIMIT) * 100),
           });
 
+          const iterStart = Date.now();
+
           // 1. Generate fixes from error output
           const fixes = await this.fixer.generateFixes(currentOutput, repoDir);
 
           if (fixes.length === 0) {
             this.log.warn("No fixes generated — cannot proceed");
             this.addTimeline(iteration, "NO_FIXES");
+            this.iterationDetails.push({
+              iteration, status: "NO_FIXES", fixesGenerated: 0, fixesApplied: 0,
+              durationMs: Date.now() - iterStart,
+            });
             break;
           }
 
@@ -113,12 +132,32 @@ export class Orchestrator {
           if (fixedCount === 0) {
             this.log.warn("No fixes were successfully applied");
             this.addTimeline(iteration, "APPLY_FAILED");
+            this.iterationDetails.push({
+              iteration, status: "APPLY_FAILED", fixesGenerated: fixes.length, fixesApplied: 0,
+              durationMs: Date.now() - iterStart,
+            });
             break;
           }
 
-          // 3. Commit and push
-          const commits = await this.committer.commitAndPush(repoDir, appliedFixes, this.branchName);
-          this.totalCommits += commits;
+          // 3. Commit and push (graceful — don't crash pipeline on push failure)
+          try {
+            const commits = await this.committer.commitAndPush(repoDir, appliedFixes, this.branchName);
+            this.totalCommits += commits;
+          } catch (pushErr) {
+            this.log.warn(`Commit/Push failed (non-fatal): ${pushErr.message}`);
+            // Still commit locally even if push fails
+            try {
+              await this.committer.ensureBranch(repoDir, this.branchName);
+              const localCommits = await this.committer.commitFixes(repoDir, appliedFixes, this.branchName);
+              this.totalCommits += localCommits;
+              this.log.info(`Committed ${localCommits} fix(es) locally (push skipped)`);
+            } catch { /* already tried */ }
+            broadcast(this.runId, {
+              event: "push_failed",
+              agent: "Committer",
+              message: `Push failed: ${pushErr.message.split("\n")[0]}. Fixes applied locally.`,
+            });
+          }
 
           // 4. Re-run tests in sandbox
           const retestResult = await this.analyzer.runTests(repoDir, analysisResult.runtime);
@@ -131,11 +170,20 @@ export class Orchestrator {
           } else {
             this.totalFailures++;
             currentOutput = retestResult.output;
+            this.errorLogs.push({ iteration, output: currentOutput?.slice(-5000) || "" });
             this.addTimeline(iteration, "FAILED");
             this.log.info(`✗ Tests still failing — ${RETRY_LIMIT - iteration} retries left`);
           }
 
-          // 5. Monitor CI/CD (non-blocking — we continue even if CI hasn't finished)
+          this.iterationDetails.push({
+            iteration,
+            status: retestResult.passed ? "PASSED" : "FAILED",
+            fixesGenerated: fixes.length,
+            fixesApplied: fixedCount,
+            durationMs: Date.now() - iterStart,
+          });
+
+          // 5. Monitor CI/CD (non-blocking, best-effort)
           try {
             const ciResult = await this.monitor.monitorCI(owner, repo, this.branchName);
             if (ciResult.passed) {
@@ -202,16 +250,28 @@ export class Orchestrator {
   }
 
   /**
-   * Build the final results.json object.
+   * Build the final results.json object — enriched with full context.
    */
   buildResults(finalStatus, totalTime) {
     const fixedCount = this.allFixes.filter((f) => f.status === "Fixed").length;
+    const failedFixes = this.allFixes.filter((f) => f.status === "Failed").length;
+    const skippedFixes = this.allFixes.filter((f) => f.status === "Skipped").length;
+    const iterationCount = this.timeline.length - 1;
     const scoreBreakdown = computeScore({
       totalTime,
       commitCount: this.totalCommits,
       fixCount: fixedCount,
-      iterationCount: this.timeline.length - 1, // exclude initial analysis
+      iterationCount,
     });
+
+    // Categorize fixes by bug type
+    const bugTypeSummary = {};
+    for (const f of this.allFixes) {
+      if (!bugTypeSummary[f.bugType]) bugTypeSummary[f.bugType] = { total: 0, fixed: 0, failed: 0 };
+      bugTypeSummary[f.bugType].total++;
+      if (f.status === "Fixed") bugTypeSummary[f.bugType].fixed++;
+      else bugTypeSummary[f.bugType].failed++;
+    }
 
     return {
       runId: this.runId,
@@ -219,22 +279,50 @@ export class Orchestrator {
       teamName: this.teamName,
       leaderName: this.leaderName,
       branch: this.branchName,
+
+      // ─── Summary stats ─────────────────────────────────────
       totalFailures: this.totalFailures,
       totalFixes: fixedCount,
+      totalFixesFailed: failedFixes,
+      totalFixesSkipped: skippedFixes,
+      totalFixesAttempted: this.allFixes.length,
       totalCommits: this.totalCommits,
+      totalIterations: iterationCount,
       finalStatus,
       totalTime: formatDuration(totalTime),
       totalTimeMs: totalTime,
+
+      // ─── Repo info ─────────────────────────────────────────
+      repoStats: this.repoStats,
+
+      // ─── Score ─────────────────────────────────────────────
       scoreBreakdown,
+
+      // ─── Bug type breakdown ────────────────────────────────
+      bugTypeSummary,
+
+      // ─── Detailed fixes (with diffs) ───────────────────────
       fixes: this.allFixes.map((f) => ({
         file: f.file,
         bugType: f.bugType,
         lineNumber: f.lineNumber,
         commitMessage: f.commitMessage || `[AI-AGENT] Fix ${f.bugType} in ${f.file}`,
         description: f.description,
+        originalCode: f.originalCode || null,
+        fixedCode: f.fixedCode || null,
         status: f.status,
+        reason: f.reason || null,
       })),
+
+      // ─── Iteration details ─────────────────────────────────
+      iterations: this.iterationDetails,
+
+      // ─── Error logs (truncated) ────────────────────────────
+      errorLogs: this.errorLogs,
+
+      // ─── Timeline ──────────────────────────────────────────
       timeline: this.timeline,
+
       generatedAt: new Date().toISOString(),
     };
   }

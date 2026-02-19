@@ -14,13 +14,13 @@ export function generateMockResult(repoUrl, teamName, leaderName) {
         .replace(/\s+/g, "_");
 
     const fixes = [
-        { file: "src/validator.py", bugType: "SYNTAX", line: 8, commitMessage: "fix: add missing colon in validator.py", status: "PASSED" },
-        { file: "src/utils/parser.py", bugType: "IMPORT", line: 3, commitMessage: "fix: correct import path for parser utils", status: "PASSED" },
-        { file: "src/models/user.py", bugType: "TYPE_ERROR", line: 42, commitMessage: "fix: resolve type mismatch in user model", status: "PASSED" },
-        { file: "src/api/routes.py", bugType: "LOGIC", line: 115, commitMessage: "fix: correct conditional logic in route handler", status: "PASSED" },
-        { file: "src/config.py", bugType: "INDENTATION", line: 27, commitMessage: "fix: normalise indentation in config", status: "PASSED" },
-        { file: "tests/test_validator.py", bugType: "LINTING", line: 19, commitMessage: "fix: remove unused variable in test", status: "PASSED" },
-        { file: "src/api/auth.py", bugType: "TYPE_ERROR", line: 66, commitMessage: "fix: cast response to correct type", status: "FAILED" },
+        { file: "src/validator.py", bugType: "SYNTAX", line: 8, commitMessage: "fix: add missing colon in validator.py", description: "Missing colon at end of function definition", originalCode: "def validate(data)", fixedCode: "def validate(data):", status: "PASSED" },
+        { file: "src/utils/parser.py", bugType: "IMPORT", line: 3, commitMessage: "fix: correct import path for parser utils", description: "Incorrect module import path", originalCode: "from utils import parse", fixedCode: "from src.utils import parse", status: "PASSED" },
+        { file: "src/models/user.py", bugType: "TYPE_ERROR", line: 42, commitMessage: "fix: resolve type mismatch in user model", description: "Integer compared with string", originalCode: 'if user.age == "25":', fixedCode: "if user.age == 25:", status: "PASSED" },
+        { file: "src/api/routes.py", bugType: "LOGIC", line: 115, commitMessage: "fix: correct conditional logic in route handler", description: "Inverted conditional check", originalCode: "if not user.is_authenticated:", fixedCode: "if user.is_authenticated:", status: "PASSED" },
+        { file: "src/config.py", bugType: "INDENTATION", line: 27, commitMessage: "fix: normalise indentation in config", description: "Mixed tabs and spaces", originalCode: "\t    DEBUG = True", fixedCode: "    DEBUG = True", status: "PASSED" },
+        { file: "tests/test_validator.py", bugType: "LINTING", line: 19, commitMessage: "fix: remove unused variable in test", description: "Unused variable 'result'", originalCode: "result = validate(data)", fixedCode: "validate(data)", status: "PASSED" },
+        { file: "src/api/auth.py", bugType: "TYPE_ERROR", line: 66, commitMessage: "fix: cast response to correct type", description: "Response body not serializable", originalCode: "return response", fixedCode: "return str(response)", status: "FAILED", reason: "Original code not found in file" },
     ];
 
     const cicdTimeline = [
@@ -28,6 +28,35 @@ export function generateMockResult(repoUrl, teamName, leaderName) {
         { iteration: 2, total: 5, status: "FAILED", timestamp: "2026-02-19 10:11 PM", message: "4 fixes applied — 3 remaining" },
         { iteration: 3, total: 5, status: "FAILED", timestamp: "2026-02-19 10:13 PM", message: "2 more fixes applied — 1 remaining" },
         { iteration: 4, total: 5, status: "PASSED", timestamp: "2026-02-19 10:16 PM", message: "Final fix applied — CI/CD passed" },
+    ];
+
+    const repoStats = {
+        language: "python",
+        runtime: "python:3.10-slim",
+        testCommand: "python -m pytest",
+        testFilesFound: 3,
+        testFiles: ["tests/test_validator.py", "tests/test_auth.py", "tests/test_routes.py"],
+    };
+
+    const bugTypeSummary = {
+        SYNTAX: { total: 1, fixed: 1, failed: 0 },
+        IMPORT: { total: 1, fixed: 1, failed: 0 },
+        TYPE_ERROR: { total: 2, fixed: 1, failed: 1 },
+        LOGIC: { total: 1, fixed: 1, failed: 0 },
+        INDENTATION: { total: 1, fixed: 1, failed: 0 },
+        LINTING: { total: 1, fixed: 1, failed: 0 },
+    };
+
+    const iterations = [
+        { iteration: 1, status: "FAILED", fixesGenerated: 4, fixesApplied: 4, durationMs: 12400, duration: "12.4s" },
+        { iteration: 2, status: "FAILED", fixesGenerated: 2, fixesApplied: 2, durationMs: 8200, duration: "8.2s" },
+        { iteration: 3, status: "PASSED", fixesGenerated: 1, fixesApplied: 1, durationMs: 5600, duration: "5.6s" },
+    ];
+
+    const errorLogs = [
+        { iteration: 0, output: "FAILED tests/test_validator.py::test_validate - SyntaxError: expected ':'\nFAILED tests/test_auth.py::test_login - TypeError: unsupported operand type(s)\n=== 7 failed, 12 passed in 1.45s ===" },
+        { iteration: 1, output: "FAILED tests/test_auth.py::test_login - TypeError: unsupported operand type(s)\nFAILED tests/test_routes.py::test_protected - AssertionError\n=== 3 failed, 16 passed in 1.23s ===" },
+        { iteration: 2, output: "FAILED tests/test_auth.py::test_response_format - TypeError: Object not serializable\n=== 1 failed, 18 passed in 1.12s ===" },
     ];
 
     const commitsUsed = 22;
@@ -38,9 +67,12 @@ export function generateMockResult(repoUrl, teamName, leaderName) {
     const finalScore = baseScore + speedBonus - efficiencyPenalty;
 
     return {
-        repoUrl, teamName, leaderName, branchName, totalFailures: 7, totalFixes: 6,
-        cicdStatus: "PASSED", timeTaken: "3:45", timeTakenMinutes, baseScore,
-        speedBonus, efficiencyPenalty, finalScore, commitsUsed, fixes, cicdTimeline,
+        repoUrl, teamName, leaderName, branchName,
+        totalFailures: 7, totalFixes: 6, totalFixesFailed: 1, totalFixesSkipped: 0,
+        totalFixesAttempted: 7, totalIterations: 3,
+        cicdStatus: "PASSED", timeTaken: "3:45", timeTakenMs: 225000, timeTakenMinutes,
+        repoStats, baseScore, speedBonus, efficiencyPenalty, fixBonus: 12, iterationPenalty: 0,
+        finalScore, commitsUsed, bugTypeSummary, fixes, iterations, errorLogs, cicdTimeline,
     };
 }
 

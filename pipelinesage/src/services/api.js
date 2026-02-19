@@ -124,30 +124,61 @@ export function transformResult(apiResult) {
     branchName: r.branch,
     totalFailures: r.totalFailures,
     totalFixes: r.totalFixes,
-    cicdStatus: r.finalStatus,                  // "PASSED" or "FAILED"
-    timeTaken: r.totalTime,                      // "4m 32s"
+    totalFixesFailed: r.totalFixesFailed ?? 0,
+    totalFixesSkipped: r.totalFixesSkipped ?? 0,
+    totalFixesAttempted: r.totalFixesAttempted ?? r.totalFixes,
+    totalIterations: r.totalIterations ?? 0,
+    cicdStatus: r.finalStatus,
+    timeTaken: r.totalTime,
+    timeTakenMs: r.totalTimeMs ?? 0,
     timeTakenMinutes: (r.totalTimeMs || 0) / 60000,
+
+    // Repo stats
+    repoStats: r.repoStats || {},
 
     // Score breakdown fields
     baseScore: sb.base ?? 100,
     speedBonus: sb.speedBonus ?? 0,
-    efficiencyPenalty: Math.abs(sb.commitPenalty ?? 0),
     fixBonus: sb.fixBonus ?? 0,
+    efficiencyPenalty: Math.abs(sb.commitPenalty ?? 0),
     iterationPenalty: Math.abs(sb.iterationPenalty ?? 0),
     finalScore: sb.total ?? 0,
     commitsUsed: r.totalCommits ?? 0,
 
-    // Fixes table
+    // Bug type summary
+    bugTypeSummary: r.bugTypeSummary || {},
+
+    // Fixes table (with diffs)
     fixes: (r.fixes || []).map((f) => ({
       file: f.file,
       bugType: f.bugType,
       line: f.lineNumber,
       commitMessage: f.commitMessage,
+      description: f.description || "",
+      originalCode: f.originalCode || null,
+      fixedCode: f.fixedCode || null,
       status: f.status === "Fixed" ? "PASSED" : "FAILED",
+      reason: f.reason || null,
+    })),
+
+    // Iteration details
+    iterations: (r.iterations || []).map((it) => ({
+      iteration: it.iteration,
+      status: it.status,
+      fixesGenerated: it.fixesGenerated ?? 0,
+      fixesApplied: it.fixesApplied ?? 0,
+      durationMs: it.durationMs ?? 0,
+      duration: it.durationMs ? `${(it.durationMs / 1000).toFixed(1)}s` : "—",
+    })),
+
+    // Error logs
+    errorLogs: (r.errorLogs || []).map((el) => ({
+      iteration: el.iteration,
+      output: el.output || "",
     })),
 
     // CI/CD Timeline
-    cicdTimeline: (r.timeline || []).map((t, i) => ({
+    cicdTimeline: (r.timeline || []).map((t) => ({
       iteration: t.iteration,
       total: r.timeline.length,
       status: t.status,
@@ -156,7 +187,9 @@ export function transformResult(apiResult) {
         ? "All tests passed — CI/CD green ✓"
         : t.status === "FAILED"
           ? `Iteration ${t.iteration} — tests failed`
-          : `Status: ${t.status}`,
+          : t.status === "ERROR"
+            ? `Error during iteration ${t.iteration}`
+            : `Status: ${t.status}`,
     })),
   };
 }
