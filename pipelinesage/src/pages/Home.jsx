@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAppContext, generateMockResult } from "@/context/AppContext";
+import { useAppContext } from "@/context/AppContext";
 import { Spinner } from "@/components/Spinner";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { Bot, Github, Users, User, ArrowRight, Zap, ArrowLeft } from "lucide-react";
+import { Bot, Github, Users, User, ArrowRight, Zap, ArrowLeft, Wifi, WifiOff } from "lucide-react";
 
-function InputField({ id, label, placeholder, value, onChange, icon, type = "text", required = true }) {
+function InputField({ id, label, placeholder, value, onChange, icon, type = "text", required = true, disabled = false }) {
     return (
         <div className="flex flex-col gap-1.5">
             <label htmlFor={id} className="text-sm font-medium text-foreground">
@@ -25,6 +25,7 @@ function InputField({ id, label, placeholder, value, onChange, icon, type = "tex
                     onChange={(e) => onChange(e.target.value)}
                     placeholder={placeholder}
                     required={required}
+                    disabled={disabled}
                     autoComplete="off"
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-input bg-card text-foreground text-sm
             placeholder:text-muted-foreground/60
@@ -37,13 +38,14 @@ function InputField({ id, label, placeholder, value, onChange, icon, type = "tex
 }
 
 export default function Home() {
-    const { setResult, isLoading, setIsLoading } = useAppContext();
+    const { runAgent, runMockAgent, setResult, isLoading, setIsLoading, agentStatus, progress } = useAppContext();
     const navigate = useNavigate();
 
     const [repoUrl, setRepoUrl] = useState("");
     const [teamName, setTeamName] = useState("");
     const [leaderName, setLeaderName] = useState("");
     const [error, setError] = useState("");
+    const [useBackend, setUseBackend] = useState(true); // true = real backend, false = mock
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -59,19 +61,30 @@ export default function Home() {
             return;
         }
 
-        setIsLoading(true);
-
         try {
-            await new Promise((res) => setTimeout(res, 2400));
-            const mockResult = generateMockResult(repoUrl, teamName, leaderName);
-            setResult(mockResult);
-            navigate("/results");
+            if (useBackend) {
+                // Real backend call
+                await runAgent({ repoUrl, teamName, leaderName });
+                // Don't navigate immediately — wait for results via WS/polling
+                // The context will set result when done, and we'll navigate then
+            } else {
+                // Mock mode
+                setIsLoading(true);
+                await runMockAgent({ repoUrl, teamName, leaderName });
+                navigate("/results");
+            }
         } catch (err) {
-            setError("Failed to connect to the agent. Please try again.");
-        } finally {
+            setError(err.message || "Failed to connect to the agent. Please try again.");
             setIsLoading(false);
         }
     };
+
+    // Navigate to results when they arrive (for backend mode)
+    const { result } = useAppContext();
+    if (result && useBackend && isLoading === false) {
+        // Result is ready, navigate
+        setTimeout(() => navigate("/results"), 100);
+    }
 
     return (
         <main className="min-h-screen bg-background flex flex-col items-center justify-center px-4 py-16 relative overflow-hidden">
@@ -96,7 +109,24 @@ export default function Home() {
                         <ArrowLeft size={14} />
                         Back
                     </button>
-                    <ThemeToggle />
+                    <div className="flex items-center gap-3">
+                        {/* Backend/Mock toggle */}
+                        <button
+                            type="button"
+                            onClick={() => setUseBackend(!useBackend)}
+                            disabled={isLoading}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer
+                                ${useBackend
+                                    ? "border-primary/30 bg-primary/10 text-primary"
+                                    : "border-border bg-secondary text-muted-foreground"
+                                } disabled:opacity-50`}
+                            title={useBackend ? "Using real backend" : "Using mock data"}
+                        >
+                            {useBackend ? <Wifi size={12} /> : <WifiOff size={12} />}
+                            {useBackend ? "Live" : "Mock"}
+                        </button>
+                        <ThemeToggle />
+                    </div>
                 </div>
             </div>
 
@@ -127,6 +157,7 @@ export default function Home() {
                                 onChange={setRepoUrl}
                                 icon={<Github size={15} />}
                                 type="url"
+                                disabled={isLoading}
                             />
                             <InputField
                                 id="team-name"
@@ -135,6 +166,7 @@ export default function Home() {
                                 value={teamName}
                                 onChange={setTeamName}
                                 icon={<Users size={15} />}
+                                disabled={isLoading}
                             />
                             <InputField
                                 id="leader-name"
@@ -143,6 +175,7 @@ export default function Home() {
                                 value={leaderName}
                                 onChange={setLeaderName}
                                 icon={<User size={15} />}
+                                disabled={isLoading}
                             />
                         </div>
 
@@ -155,6 +188,29 @@ export default function Home() {
                                 <code className="text-xs font-mono text-primary font-semibold break-all">
                                     {`${teamName}_${leaderName}_AI_Fix`.toUpperCase().replace(/\s+/g, "_")}
                                 </code>
+                            </div>
+                        )}
+
+                        {/* Real-time progress */}
+                        {isLoading && useBackend && (
+                            <div className="mt-5 px-4 py-3 rounded-xl bg-primary/5 border border-primary/20 fade-in">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                                    <p className="text-xs font-semibold text-primary">Agent Running</p>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    {agentStatus || "Connecting..."}
+                                </p>
+                                {progress.length > 0 && (
+                                    <div className="mt-2 max-h-28 overflow-y-auto space-y-0.5">
+                                        {progress.slice(-6).map((p, i) => (
+                                            <p key={i} className="text-[11px] text-muted-foreground font-mono truncate">
+                                                <span className="text-primary/60">[{p.agent || "System"}]</span>{" "}
+                                                {p.message}
+                                            </p>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -181,11 +237,11 @@ export default function Home() {
                             aria-label={isLoading ? "Running agent, please wait" : "Run AI agent"}
                         >
                             {isLoading ? (
-                                <Spinner size="sm" label="Analyzing..." />
+                                <Spinner size="sm" label={useBackend ? agentStatus || "Running..." : "Analyzing..."} />
                             ) : (
                                 <>
                                     <Zap size={15} aria-hidden="true" />
-                                    Run Agent
+                                    {useBackend ? "Run Agent" : "Run Agent (Mock)"}
                                     <ArrowRight size={15} aria-hidden="true" />
                                 </>
                             )}
@@ -195,9 +251,9 @@ export default function Home() {
 
                 <p className="text-center text-xs text-muted-foreground mt-6">
                     Results are generated using our autonomous fix engine.{" "}
-                    <span className="inline-flex items-center gap-1 text-primary font-semibold">
-                        <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                        Mock mode active
+                    <span className={`inline-flex items-center gap-1 font-semibold ${useBackend ? "text-success" : "text-primary"}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${useBackend ? "bg-success" : "bg-primary"}`} />
+                        {useBackend ? "Live mode" : "Mock mode"}
                     </span>
                 </p>
             </div>

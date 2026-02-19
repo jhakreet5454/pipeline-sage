@@ -2,30 +2,84 @@
  * ═══════════════════════════════════════════════════════════════════════
  *  Docker Utility
  *  ─ Runs commands inside Docker containers for sandboxed execution.
- *    Uses dockerode to manage container lifecycle.
+ *    Falls back to native child_process when Docker is unavailable.
  * ═══════════════════════════════════════════════════════════════════════
  */
 
 import Docker from "dockerode";
 import path from "path";
+import { exec } from "child_process";
 import { createRunLogger } from "./logger.js";
 
 const docker = new Docker({
   socketPath: process.env.DOCKER_SOCKET || "/var/run/docker.sock",
 });
 
+/** Cache Docker availability check */
+let _dockerAvailable = null;
+
 /**
- * Run a command inside a Docker container with the repo mounted.
- *
- * @param {object} opts
- * @param {string} opts.image     - Docker image (e.g. "node:18-alpine")
- * @param {string} opts.repoDir   - Absolute path to the repo to mount
- * @param {string} opts.cmd       - Shell command to run
- * @param {string} opts.runId     - Run ID for logging
- * @param {number} [opts.timeout] - Max execution time in ms (default 120s)
- * @returns {{ exitCode: number, stdout: string, stderr: string }}
+ * Check if Docker is available and running.
+ */
+export async function checkDockerHealth() {
+  try {
+    const info = await docker.info();
+    _dockerAvailable = true;
+    return { available: true, version: info.ServerVersion, containers: info.Containers };
+  } catch (err) {
+    _dockerAvailable = false;
+    return { available: false, error: err.message };
+  }
+}
+
+/**
+ * Run a command — tries Docker first, falls back to native execution.
  */
 export async function runInDocker({ image, repoDir, cmd, runId, timeout = 120_000 }) {
+  // Check Docker availability (cached after first check)
+  if (_dockerAvailable === null) {
+    await checkDockerHealth();
+  }
+
+  if (_dockerAvailable) {
+    return _runInDockerContainer({ image, repoDir, cmd, runId, timeout });
+  } else {
+    return _runNative({ repoDir, cmd, runId, timeout });
+  }
+}
+
+/* ─── Native fallback (child_process) ──────────────────────────────── */
+
+function _runNative({ repoDir, cmd, runId, timeout }) {
+  const log = createRunLogger(runId, "NativeExec");
+  const absRepoDir = path.resolve(repoDir);
+
+  log.info(`Docker unavailable — running natively: sh -c "${cmd}"`);
+
+  return new Promise((resolve) => {
+    const child = exec(cmd, {
+      cwd: absRepoDir,
+      timeout,
+      maxBuffer: 10 * 1024 * 1024, // 10MB
+      env: { ...process.env, CI: "true" },
+    }, (error, stdout, stderr) => {
+      const exitCode = error ? (error.code || 1) : 0;
+      log.info(`Native exec finished — exit code: ${exitCode}`);
+
+      // Truncate extremely long outputs
+      const MAX_OUTPUT = 50_000;
+      resolve({
+        exitCode,
+        stdout: stdout?.slice(-MAX_OUTPUT) || "",
+        stderr: stderr?.slice(-MAX_OUTPUT) || "",
+      });
+    });
+  });
+}
+
+/* ─── Docker execution ─────────────────────────────────────────────── */
+
+async function _runInDockerContainer({ image, repoDir, cmd, runId, timeout }) {
   const log = createRunLogger(runId, "Docker");
   const absRepoDir = path.resolve(repoDir);
 
@@ -48,9 +102,9 @@ export async function runInDocker({ image, repoDir, cmd, runId, timeout = 120_00
     WorkingDir: "/workspace",
     HostConfig: {
       Binds: [`${absRepoDir}:/workspace`],
-      Memory: 512 * 1024 * 1024,     // 512MB limit
-      MemorySwap: 1024 * 1024 * 1024, // 1GB swap
-      NanoCpus: 2_000_000_000,        // 2 CPUs
+      Memory: 512 * 1024 * 1024,
+      MemorySwap: 1024 * 1024 * 1024,
+      NanoCpus: 2_000_000_000,
       NetworkMode: "bridge",
     },
     Tty: false,
@@ -64,21 +118,15 @@ export async function runInDocker({ image, repoDir, cmd, runId, timeout = 120_00
   let timedOut = false;
 
   try {
-    // Attach to capture output
     const stream = await container.attach({ stream: true, stdout: true, stderr: true });
 
-    // Collect output
     const outputPromise = new Promise((resolve) => {
       const chunks = { stdout: [], stderr: [] };
 
       container.modem.demuxStream(
         stream,
-        {
-          write: (chunk) => chunks.stdout.push(chunk.toString()),
-        },
-        {
-          write: (chunk) => chunks.stderr.push(chunk.toString()),
-        }
+        { write: (chunk) => chunks.stdout.push(chunk.toString()) },
+        { write: (chunk) => chunks.stderr.push(chunk.toString()) }
       );
 
       stream.on("end", () => {
@@ -89,19 +137,13 @@ export async function runInDocker({ image, repoDir, cmd, runId, timeout = 120_00
       });
     });
 
-    // Start container
     await container.start();
     log.info("Container started");
 
-    // Set timeout
     const timeoutPromise = new Promise((resolve) =>
-      setTimeout(() => {
-        timedOut = true;
-        resolve(null);
-      }, timeout)
+      setTimeout(() => { timedOut = true; resolve(null); }, timeout)
     );
 
-    // Wait for completion or timeout
     const waitPromise = container.wait();
     const result = await Promise.race([waitPromise, timeoutPromise]);
 
@@ -109,7 +151,7 @@ export async function runInDocker({ image, repoDir, cmd, runId, timeout = 120_00
       log.warn(`Container timed out after ${timeout / 1000}s — killing`);
       try { await container.kill(); } catch { /* already stopped */ }
       stderr = "TIMEOUT: Command execution exceeded time limit";
-      exitCode = 124; // standard timeout exit code
+      exitCode = 124;
     } else {
       exitCode = result.StatusCode;
       const output = await outputPromise;
@@ -122,7 +164,6 @@ export async function runInDocker({ image, repoDir, cmd, runId, timeout = 120_00
     log.error(`Container execution error: ${err.message}`);
     stderr = err.message;
   } finally {
-    // Cleanup: remove container
     try {
       await container.remove({ force: true });
       log.info("Container removed");
@@ -131,7 +172,6 @@ export async function runInDocker({ image, repoDir, cmd, runId, timeout = 120_00
     }
   }
 
-  // Truncate extremely long outputs
   const MAX_OUTPUT = 50_000;
   if (stdout.length > MAX_OUTPUT) stdout = stdout.slice(-MAX_OUTPUT);
   if (stderr.length > MAX_OUTPUT) stderr = stderr.slice(-MAX_OUTPUT);
@@ -139,9 +179,8 @@ export async function runInDocker({ image, repoDir, cmd, runId, timeout = 120_00
   return { exitCode, stdout, stderr };
 }
 
-/**
- * Pull a Docker image.
- */
+/* ─── Helpers ──────────────────────────────────────────────────────── */
+
 function pullImage(image) {
   return new Promise((resolve, reject) => {
     docker.pull(image, (err, stream) => {
@@ -152,16 +191,4 @@ function pullImage(image) {
       });
     });
   });
-}
-
-/**
- * Check if Docker is available and running.
- */
-export async function checkDockerHealth() {
-  try {
-    const info = await docker.info();
-    return { available: true, version: info.ServerVersion, containers: info.Containers };
-  } catch (err) {
-    return { available: false, error: err.message };
-  }
 }

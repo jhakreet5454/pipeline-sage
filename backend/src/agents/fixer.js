@@ -1,14 +1,14 @@
 /**
  * ═══════════════════════════════════════════════════════════════════════
  *  Fixer Agent
- *  ─ Uses LLM (OpenAI via LangChain) to classify bugs from error logs,
- *    generate targeted code fixes, and apply them to the local repo.
+ *  ─ Uses LLM (Google Gemini via LangChain) to classify bugs from error
+ *    logs, generate targeted code fixes, and apply them to the local repo.
  * ═══════════════════════════════════════════════════════════════════════
  */
 
 import fs from "fs-extra";
 import path from "path";
-import { ChatOpenAI } from "@langchain/openai";
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { createRunLogger } from "../utils/logger.js";
 import { parseErrorLog, BUG_TYPES } from "../utils/classifier.js";
@@ -41,10 +41,11 @@ export class FixerAgent {
   constructor(runId) {
     this.runId = runId;
     this.log = createRunLogger(runId, "Fixer");
-    this.llm = new ChatOpenAI({
-      modelName: process.env.OPENAI_MODEL || "gpt-4o",
+    this.llm = new ChatGoogleGenerativeAI({
+      model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
+      apiKey: process.env.GOOGLE_API_KEY,
       temperature: 0.1,
-      maxTokens: 4096,
+      maxOutputTokens: 8192,
     });
   }
 

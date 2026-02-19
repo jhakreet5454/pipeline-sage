@@ -9,8 +9,8 @@
         "dev": "node --watch index.js"
     },
     "dependencies": {
-        "@langchain/core": "^0.3.0",
-        "@langchain/openai": "^0.3.0",
+        "@langchain/core": "^1.1.26",
+        "@langchain/google-genai": "^2.1.19",
         "@octokit/rest": "^21.0.0",
         "axios": "^1.7.0",
         "cors": "^2.8.5",
