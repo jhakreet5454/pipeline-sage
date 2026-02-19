@@ -45,20 +45,27 @@ function TerminalAnimation() {
 
     useEffect(() => {
         let i = 0;
+        let resetTimeout = null;
+
         const interval = setInterval(() => {
             if (i < terminalLines.length) {
-                setVisibleLines((prev) => [...prev, terminalLines[i]]);
+                const line = terminalLines[i];
                 i++;
-            } else {
-                // Reset and loop
-                setTimeout(() => {
+                setVisibleLines((prev) => [...prev, line]);
+            } else if (!resetTimeout) {
+                // Only schedule ONE reset per cycle
+                resetTimeout = setTimeout(() => {
                     setVisibleLines([]);
                     i = 0;
+                    resetTimeout = null;
                 }, 3000);
             }
         }, 350);
 
-        return () => clearInterval(interval);
+        return () => {
+            clearInterval(interval);
+            if (resetTimeout) clearTimeout(resetTimeout);
+        };
     }, []);
 
     useEffect(() => {
@@ -78,7 +85,7 @@ function TerminalAnimation() {
                 </span>
             </div>
             <div className="terminal-body" ref={bodyRef} style={{ maxHeight: 280, overflowY: "auto" }}>
-                {visibleLines.map((line, i) => (
+                {visibleLines.filter(Boolean).map((line, i) => (
                     <div key={i} className="terminal-line" style={{ animationDelay: `${i * 0.05}s` }}>
                         {line.type === "prompt" && (
                             <span>
@@ -190,8 +197,8 @@ export default function Index() {
             {/* ─── Navbar ─────────────────────────────────────────────── */}
             <nav
                 className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled
-                        ? "bg-background/80 backdrop-blur-xl border-b border-border shadow-sm"
-                        : "bg-transparent border-b border-transparent"
+                    ? "bg-background/80 backdrop-blur-xl border-b border-border shadow-sm"
+                    : "bg-transparent border-b border-transparent"
                     }`}
             >
                 <div className="max-w-6xl mx-auto flex items-center justify-between px-6 h-16">

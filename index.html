@@ -1,24 +1,28 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="HealFlow AI — Autonomous DevOps agent that detects, fixes, and commits code issues directly to your GitHub repository." />
-    <meta name="theme-color" content="#3b82f6" />
-    <title>HealFlow AI — Autonomous DevOps Agent</title>
-    <!-- Prevent flash of wrong theme -->
-    <script>
-      (function() {
-        const saved = localStorage.getItem('theme');
-        if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-          document.documentElement.classList.add('dark');
-        }
-      })();
-    </script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description"
+    content="PipelineSage — Autonomous DevOps agent that detects, fixes, and commits code issues directly to your GitHub repository." />
+  <meta name="theme-color" content="#3b82f6" />
+  <title>PipelineSage — Autonomous DevOps Agent</title>
+  <!-- Prevent flash of wrong theme -->
+  <script>
+    (function () {
+      const saved = localStorage.getItem('theme');
+      if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      }
+    })();
+  </script>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
 </html>
