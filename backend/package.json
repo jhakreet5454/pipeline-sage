@@ -1,0 +1,33 @@
+{
+    "name": "pipelinesage-backend",
+    "version": "1.0.0",
+    "description": "Autonomous DevOps Agent Backend — RIFT 2026 Hackathon",
+    "type": "module",
+    "main": "index.js",
+    "scripts": {
+        "start": "node index.js",
+        "dev": "node --watch index.js"
+    },
+    "dependencies": {
+        "@langchain/core": "^0.3.0",
+        "@langchain/openai": "^0.3.0",
+        "@octokit/rest": "^21.0.0",
+        "axios": "^1.7.0",
+        "cors": "^2.8.5",
+        "dockerode": "^4.0.0",
+        "dotenv": "^16.4.0",
+        "express": "^4.21.0",
+        "fs-extra": "^11.2.0",
+        "simple-git": "^3.27.0",
+        "uuid": "^10.0.0",
+        "winston": "^3.14.0",
+        "ws": "^8.18.0"
+    },
+    "keywords": [
+        "devops",
+        "ai-agent",
+        "cicd",
+        "hackathon"
+    ],
+    "license": "MIT"
+}
