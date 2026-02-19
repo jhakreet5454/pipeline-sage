@@ -1,1 +1,435 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
 @import "tailwindcss";
+
+/* ─── Dark mode variant ──────────────────────────────────────────── */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ─── Theme tokens → Tailwind utilities ──────────────────────────── */
+@theme inline {
+    --color-background: hsl(var(--background));
+    --color-foreground: hsl(var(--foreground));
+    --color-card: hsl(var(--card));
+    --color-card-foreground: hsl(var(--card-foreground));
+    --color-primary: hsl(var(--primary));
+    --color-primary-foreground: hsl(var(--primary-foreground));
+    --color-primary-hover: hsl(var(--primary-hover));
+    --color-secondary: hsl(var(--secondary));
+    --color-secondary-foreground: hsl(var(--secondary-foreground));
+    --color-muted: hsl(var(--muted));
+    --color-muted-foreground: hsl(var(--muted-foreground));
+    --color-accent: hsl(var(--accent));
+    --color-accent-foreground: hsl(var(--accent-foreground));
+    --color-success: hsl(var(--success));
+    --color-success-foreground: hsl(var(--success-foreground));
+    --color-success-bg: hsl(var(--success-bg));
+    --color-success-border: hsl(var(--success-border));
+    --color-danger: hsl(var(--danger));
+    --color-danger-foreground: hsl(var(--danger-foreground));
+    --color-danger-bg: hsl(var(--danger-bg));
+    --color-danger-border: hsl(var(--danger-border));
+    --color-warning: hsl(var(--warning));
+    --color-warning-foreground: hsl(var(--warning-foreground));
+    --color-warning-bg: hsl(var(--warning-bg));
+    --color-border: hsl(var(--border));
+    --color-input: hsl(var(--input));
+    --color-ring: hsl(var(--ring));
+
+    --font-sans: 'Inter', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+    --shadow-card: 0 0 0 1px hsl(var(--border)), 0 1px 3px 0 hsl(var(--foreground) / 0.04);
+    --shadow-glow: 0 0 40px -8px hsl(var(--primary) / 0.35);
+}
+
+/* ─── Light theme tokens ─────────────────────────────────────────── */
+:root {
+    --background: 220 20% 97%;
+    --foreground: 220 14% 16%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 14% 16%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 217 91% 52%;
+
+    --secondary: 220 14% 93%;
+    --secondary-foreground: 220 10% 38%;
+
+    --muted: 220 14% 93%;
+    --muted-foreground: 220 10% 48%;
+
+    --accent: 220 14% 93%;
+    --accent-foreground: 220 14% 16%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --success-bg: 142 55% 95%;
+    --success-border: 142 55% 78%;
+
+    --danger: 0 84% 60%;
+    --danger-foreground: 0 0% 100%;
+    --danger-bg: 0 80% 96%;
+    --danger-border: 0 80% 82%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --warning-bg: 38 92% 95%;
+
+    --border: 220 13% 88%;
+    --input: 220 13% 88%;
+    --ring: 217 91% 60%;
+}
+
+/* ─── Dark theme tokens ──────────────────────────────────────────── */
+.dark {
+    --background: 224 42% 8%;
+    --foreground: 210 20% 92%;
+
+    --card: 224 42% 11%;
+    --card-foreground: 210 20% 92%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 217 91% 68%;
+
+    --secondary: 224 30% 16%;
+    --secondary-foreground: 210 14% 76%;
+
+    --muted: 224 30% 16%;
+    --muted-foreground: 210 10% 54%;
+
+    --accent: 224 30% 16%;
+    --accent-foreground: 210 20% 92%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --success-bg: 142 50% 12%;
+    --success-border: 142 40% 28%;
+
+    --danger: 0 84% 60%;
+    --danger-foreground: 0 0% 100%;
+    --danger-bg: 0 60% 12%;
+    --danger-border: 0 50% 28%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --warning-bg: 38 60% 12%;
+
+    --border: 224 30% 18%;
+    --input: 224 30% 18%;
+    --ring: 217 91% 60%;
+}
+
+/* ─── Base resets ─────────────────────────────────────────────────── */
+* {
+    box-sizing: border-box;
+    border-color: hsl(var(--border));
+}
+
+html {
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
+}
+
+body {
+    margin: 0;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: var(--font-sans);
+    line-height: 1.6;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+}
+
+code,
+pre,
+.mono {
+    font-family: var(--font-mono);
+}
+
+/* ─── Animations ──────────────────────────────────────────────────── */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-12px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideInLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes float {
+
+    0%,
+    100% {
+        transform: translateY(0px);
+    }
+
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+@keyframes pulse-glow {
+
+    0%,
+    100% {
+        opacity: 0.4;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.8;
+        transform: scale(1.05);
+    }
+}
+
+@keyframes gradient-shift {
+    0% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+@keyframes typing {
+    from {
+        width: 0;
+    }
+
+    to {
+        width: 100%;
+    }
+}
+
+@keyframes blink-caret {
+
+    from,
+    to {
+        border-color: transparent;
+    }
+
+    50% {
+        border-color: hsl(var(--primary));
+    }
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes counter-pulse {
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.08);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+.fade-in {
+    animation: fadeIn 0.4s ease forwards;
+}
+
+.fade-in-up {
+    animation: fadeInUp 0.5s ease forwards;
+}
+
+.fade-in-down {
+    animation: fadeInDown 0.5s ease forwards;
+}
+
+.slide-in-left {
+    animation: slideInLeft 0.5s ease forwards;
+}
+
+.float {
+    animation: float 4s ease-in-out infinite;
+}
+
+.gradient-text {
+    background: linear-gradient(135deg,
+            hsl(var(--primary)) 0%,
+            hsl(280 80% 65%) 50%,
+            hsl(var(--primary)) 100%);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: gradient-shift 4s ease infinite;
+}
+
+.glow-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.3;
+    animation: pulse-glow 6s ease-in-out infinite;
+    pointer-events: none;
+}
+
+/* ─── Scrollbar ───────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
+}
+
+/* ─── Terminal animation ──────────────────────────────────────────── */
+.terminal {
+    background: hsl(224 42% 6%);
+    border: 1px solid hsl(224 30% 18%);
+    border-radius: 12px;
+    overflow: hidden;
+    font-family: var(--font-mono);
+}
+
+.terminal-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 16px;
+    background: hsl(224 42% 9%);
+    border-bottom: 1px solid hsl(224 30% 16%);
+}
+
+.terminal-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+.terminal-body {
+    padding: 16px 20px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: hsl(210 20% 75%);
+    min-height: 200px;
+}
+
+.terminal-line {
+    opacity: 0;
+    animation: fadeIn 0.3s ease forwards;
+}
+
+.terminal-prompt {
+    color: hsl(142 71% 55%);
+}
+
+.terminal-command {
+    color: hsl(210 20% 92%);
+}
+
+.terminal-output {
+    color: hsl(210 10% 54%);
+}
+
+.terminal-success {
+    color: hsl(142 71% 55%);
+}
+
+.terminal-error {
+    color: hsl(0 84% 60%);
+}
+
+.terminal-info {
+    color: hsl(217 91% 65%);
+}
+
+/* ─── Glass morphism ──────────────────────────────────────────────── */
+.glass {
+    background: hsl(var(--card) / 0.6);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid hsl(var(--border) / 0.5);
+}
+
+/* ─── Grid background pattern ─────────────────────────────────────── */
+.grid-bg {
+    background-image:
+        linear-gradient(hsl(var(--border) / 0.3) 1px, transparent 1px),
+        linear-gradient(90deg, hsl(var(--border) / 0.3) 1px, transparent 1px);
+    background-size: 60px 60px;
+}
+
+/* ─── Selection ───────────────────────────────────────────────────── */
+::selection {
+    background: hsl(var(--primary) / 0.25);
+    color: hsl(var(--foreground));
+}
